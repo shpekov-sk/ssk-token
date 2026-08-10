@@ -1,0 +1,8 @@
+node_modules/
+artifacts/
+
+# Приватные ключи и всё, что рядом с ними.
+.env
+.env.*
+*.key
+marks/
