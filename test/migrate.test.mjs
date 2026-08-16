@@ -222,3 +222,61 @@ test('стоимость всей миграции по газу укладыв�
   assert.ok(gas < 3_500_000n, `слишком дорого: ${gas}`)
   assert.ok(Number(costUsd) < 0.05, `$${costUsd} — дороже ожидаемого`)
 })
+
+test('сценарий запуска целиком: старый пул выведен, новый токен в паре по $1.00', async () => {
+  const ctx = await setup()
+  const { chain, me, weth, factory, router, usdc } = ctx
+  const oldToken = ctx.token
+  await seedWethPool(ctx)
+
+  // 1. вывод ликвидности из старого пула
+  const oldPair = await contractAt(chain, FACTORY_ABI, factory.address).read('getPair', [
+    oldToken.address,
+    weth.address,
+  ])
+  const pair = contractAt(chain, PAIR_ABI, oldPair)
+  const lp = await pair.read('balanceOf', [me.hex])
+  await pair.write(me, 'approve', [router.address, lp])
+  await router.write(me, 'removeLiquidityETH', [oldToken.address, lp, 0n, 0n, me.hex, DEADLINE])
+
+  // 2. новый токен с другим именем
+  const fresh = await deploy(
+    chain,
+    'FixedSupplyToken',
+    ['Skull Coin', 'SKULL', 18, parseUnits('1000000', 18), me.hex],
+    me,
+  )
+  assert.equal(await fresh.read('name'), 'Skull Coin')
+  assert.equal(await fresh.read('symbol'), 'SKULL')
+  assert.notEqual(fresh.address.toLowerCase(), oldToken.address.toLowerCase(), 'должен быть новый адрес')
+
+  // 3. пара новый токен/USDC по $1.00
+  const tokenAmount = parseUnits('0.3', 18)
+  const usdcAmount = parseUnits('0.3', 6)
+  await fresh.write(me, 'approve', [router.address, tokenAmount])
+  await usdc.write(me, 'approve', [router.address, usdcAmount])
+  await router.write(me, 'addLiquidity', [
+    fresh.address,
+    usdc.address,
+    tokenAmount,
+    usdcAmount,
+    tokenAmount,
+    usdcAmount,
+    me.hex,
+    DEADLINE,
+  ])
+
+  const newPair = await contractAt(chain, FACTORY_ABI, factory.address).read('getPair', [
+    fresh.address,
+    usdc.address,
+  ])
+  const reserves = await reservesOf(chain, newPair, fresh.address)
+  const price = Number(formatUnits(reserves.quote, 6)) / Number(formatUnits(reserves.token, 18))
+
+  assert.equal(price, 1, `цена ${price}, нужна ровно 1.00`)
+
+  // Старый токен остался на месте и по-прежнему у нас
+  assert.ok((await oldToken.read('balanceOf', [me.hex])) > 0n, 'старые токены не должны исчезнуть')
+  const remaining = await fresh.read('balanceOf', [me.hex])
+  assert.equal(Number(formatUnits(remaining, 18)), 999999.7, 'остаток нового токена')
+})
