@@ -14,7 +14,8 @@
     "sigil": "node scripts/print.mjs",
     "mine": "node scripts/mine.mjs",
     "pool": "node scripts/add-liquidity.mjs",
-    "nudge": "node scripts/nudge-price.mjs"
+    "nudge": "node scripts/nudge-price.mjs",
+    "zk": "node scripts/zk/demo.mjs"
   },
   "keywords": [],
   "author": "",
