@@ -3,11 +3,12 @@
 //   PRIVATE_KEY=0x... TOKEN_NAME="..." TOKEN_SYMBOL=... npm run deploy
 //
 // По умолчанию — Base Sepolia (тестовая сеть). Для мейннета нужен ещё CONFIRM=yes.
-import { createWalletClient, createPublicClient, http, parseUnits, formatEther, formatUnits, encodeDeployData } from 'viem'
+import { createWalletClient, createPublicClient, parseUnits, formatEther, formatUnits, encodeDeployData } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import * as chains from 'viem/chains'
 import { createInterface } from 'node:readline/promises'
 import { artifact } from '../test/harness.mjs'
+import { transportFor } from './rpc.mjs'
 import { normalizePrivateKey } from './key.mjs'
 
 const {
@@ -46,7 +47,7 @@ const decimals = Number(TOKEN_DECIMALS)
 const supply = parseUnits(TOKEN_SUPPLY, decimals)
 
 const account = privateKeyToAccount(parsedKey.key)
-const transport = http(RPC_URL || chain.rpcUrls.default.http[0])
+const transport = transportFor(chain, RPC_URL)
 const publicClient = createPublicClient({ chain, transport })
 const walletClient = createWalletClient({ account, chain, transport })
 const holder = HOLDER ?? account.address

@@ -10,7 +10,6 @@ import * as chains from 'viem/chains'
 import {
   createPublicClient,
   createWalletClient,
-  http,
   formatEther,
   formatUnits,
   getAddress,
@@ -21,6 +20,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import { createInterface } from 'node:readline/promises'
 import { normalizePrivateKey } from './key.mjs'
+import { transportFor, endpointsFor } from './rpc.mjs'
 import { describePlan, ethForTargetPrice, toWei } from './pool-plan.mjs'
 
 // Официальные деплои Uniswap V2 в Base. Проверяются в сети ниже.
@@ -63,7 +63,7 @@ if (!routerAddress) fail(`для сети ${CHAIN} не задан ROUTER=0x... 
 const token = getAddress(TOKEN_ADDRESS)
 const router = getAddress(routerAddress)
 const account = privateKeyToAccount(key.key)
-const transport = http(RPC_URL || chain.rpcUrls.default.http[0])
+const transport = transportFor(chain, RPC_URL)
 const publicClient = createPublicClient({ chain, transport })
 const walletClient = createWalletClient({ account, chain, transport })
 
@@ -85,20 +85,22 @@ const ERC20_ABI = parseAbi([
 const routerCode = await publicClient.getCode({ address: router })
 if (!routerCode || routerCode === '0x') fail(`по адресу роутера ${router} нет кода — не тот адрес или не та сеть`)
 
-const [factory, weth] = await Promise.all([
-  publicClient.readContract({ address: router, abi: ROUTER_ABI, functionName: 'factory' }),
-  publicClient.readContract({ address: router, abi: ROUTER_ABI, functionName: 'WETH' }),
-])
+// Последовательно, а не пачкой: публичные RPC отвечают «over rate limit» на burst.
+const factory = await publicClient.readContract({ address: router, abi: ROUTER_ABI, functionName: 'factory' })
+const weth = await publicClient.readContract({ address: router, abi: ROUTER_ABI, functionName: 'WETH' })
 
 if (defaults?.weth && getAddress(weth) !== getAddress(defaults.weth)) {
   fail(`роутер сообщает WETH ${weth}, а в сети ${CHAIN} ожидался ${defaults.weth} — проверь ROUTER`)
 }
 
-const [symbol, decimals, balance] = await Promise.all([
-  publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'symbol' }),
-  publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'decimals' }),
-  publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'balanceOf', args: [account.address] }),
-])
+const symbol = await publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'symbol' })
+const decimals = await publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'decimals' })
+const balance = await publicClient.readContract({
+  address: token,
+  abi: ERC20_ABI,
+  functionName: 'balanceOf',
+  args: [account.address],
+})
 
 const existingPair = await publicClient.readContract({
   address: getAddress(factory),
@@ -124,6 +126,7 @@ const nativeSymbol = chain.nativeCurrency.symbol
 console.log(`сеть:      ${chain.name} (${chain.id})`)
 console.log(`кошелёк:   ${account.address}`)
 console.log(`баланс:    ${formatEther(nativeBalance)} ${nativeSymbol} и ${balanceTokens} ${symbol}`)
+console.log(`узлы:      ${endpointsFor(chain, RPC_URL).length} (при отказе переключается на следующий)`)
 console.log(`роутер:    ${router}`)
 console.log(`фабрика:   ${getAddress(factory)}`)
 console.log(`пара:      ${pairExists ? `уже существует, ${existingPair}` : 'будет создана'}`)

@@ -10,11 +10,12 @@
 // деплоем хоть в одном символе, и верификация отклоняется без объяснений.
 // Платный getcontractcreation у Etherscan для этого не нужен.
 import * as chains from 'viem/chains'
-import { createPublicClient, http, isAddress, getAddress, decodeAbiParameters } from 'viem'
+import { createPublicClient, isAddress, getAddress, decodeAbiParameters } from 'viem'
 import { artifact } from '../test/harness.mjs'
 import { buildStandardInput, SOLC_VERSION } from './standard-input.mjs'
 import { findCreation } from './creation.mjs'
 import { buildVerifyRequest, buildStatusRequest } from './verify-request.mjs'
+import { transportFor } from './rpc.mjs'
 
 const { ETHERSCAN_API_KEY, TOKEN_ADDRESS, CHAIN = 'base', RPC_URL } = process.env
 
@@ -36,7 +37,7 @@ console.log(`контракт:  ${address}`)
 
 // ---------- аргументы конструктора из транзакции создания ----------
 const { abi, bytecode } = artifact('FixedSupplyToken')
-const publicClient = createPublicClient({ chain, transport: http(RPC_URL || chain.rpcUrls.default.http[0]) })
+const publicClient = createPublicClient({ chain, transport: transportFor(chain, RPC_URL) })
 
 process.stdout.write('ищу транзакцию создания... ')
 const creation = await findCreation(publicClient, address, bytecode).catch((error) => fail(`\n${error.message}`))
