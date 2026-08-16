@@ -20,6 +20,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import { createInterface } from 'node:readline/promises'
 import { normalizePrivateKey } from './key.mjs'
+import { readEnv } from './env.mjs'
 import { transportFor, endpointsFor } from './rpc.mjs'
 import { waitUntil } from './wait.mjs'
 import { describePlan, ethForTargetPrice, toWei } from './pool-plan.mjs'
@@ -32,6 +33,14 @@ const DEFAULTS = {
   },
 }
 
+const fail = (message) => {
+  console.error(message)
+  process.exit(1)
+}
+
+// Синонимы принимаются, непонятные имена — отказ: молча взятый дефолт хуже.
+const ENV = readEnv(process.env, fail)
+
 const {
   PRIVATE_KEY,
   TOKEN_ADDRESS,
@@ -43,12 +52,7 @@ const {
   ROUTER,
   CONFIRM,
   SLIPPAGE_BPS = '100',
-} = process.env
-
-const fail = (message) => {
-  console.error(message)
-  process.exit(1)
-}
+} = ENV
 
 const key = normalizePrivateKey(PRIVATE_KEY)
 if (key.error) fail(`ключ не подходит: ${key.error}`)
