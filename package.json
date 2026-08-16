@@ -1,7 +1,7 @@
 {
-  "name": "ssk-token",
+  "name": "zalupa",
   "version": "0.1.0",
-  "description": "ERC-20 токен $$K.1 с фиксированной эмиссией",
+  "description": "ZALUPA (ZLP) — ERC-20 в сети Base",
   "main": "index.js",
   "scripts": {
     "test": "node scripts/compile.mjs && node --test 'test/*.test.mjs'",
