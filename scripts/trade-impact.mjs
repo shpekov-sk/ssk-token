@@ -2,7 +2,13 @@
 //
 // Нужно, чтобы «микро-своп ради индексатора» не оказался покупкой, сдвигающей
 // цену на десятки процентов: в пуле глубиной $0.60 это очень легко.
-import { amountOut } from './arb/optimal.mjs'
+/** Стандартный getAmountOut из UniswapV2Library, на целых числах. */
+function amountOut(amountIn, reserveIn, reserveOut, feeBps = 30n) {
+  if (amountIn <= 0n || reserveIn <= 0n || reserveOut <= 0n) return 0n
+
+  const withFee = amountIn * (10_000n - feeBps)
+  return (withFee * reserveOut) / (reserveIn * 10_000n + withFee)
+}
 
 /**
  * @param {bigint} reserveIn резерв токена, который вкладывают

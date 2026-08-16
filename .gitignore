@@ -6,3 +6,6 @@ artifacts/
 .env.*
 *.key
 marks/
+
+# Служебное
+.DS_Store
