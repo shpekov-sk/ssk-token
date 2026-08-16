@@ -17,7 +17,8 @@
     "nudge": "node scripts/nudge-price.mjs",
     "zk": "node scripts/zk/demo.mjs",
     "arb": "node scripts/arb/scan.mjs",
-    "skim": "node scripts/arb/skim.mjs"
+    "skim": "node scripts/arb/skim.mjs",
+    "harvest": "node scripts/keeper/harvest-scan.mjs"
   },
   "keywords": [],
   "author": "",
