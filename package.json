@@ -13,7 +13,8 @@
     "token-list": "node scripts/token-list.mjs",
     "sigil": "node scripts/print.mjs",
     "mine": "node scripts/mine.mjs",
-    "pool": "node scripts/add-liquidity.mjs"
+    "pool": "node scripts/add-liquidity.mjs",
+    "nudge": "node scripts/nudge-price.mjs"
   },
   "keywords": [],
   "author": "",
