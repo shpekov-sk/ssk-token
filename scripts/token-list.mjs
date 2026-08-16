@@ -20,7 +20,9 @@ const {
   TOKEN_ADDRESS,
   CHAIN = 'base',
   RPC_URL,
-  LOGO_URL = 'https://raw.githubusercontent.com/shpekov-sk/ssk-token/main/assets/logo-256.png',
+  // Логотип отдаётся своим доменом, а не raw.githubusercontent: путь на GitHub
+  // ломается при переименовании репозитория или переносе в организацию.
+  LOGO_URL = 'https://zalupa.world/logo-256.png',
   LIST_NAME,
   TOKEN_NAME,
   TOKEN_SYMBOL,

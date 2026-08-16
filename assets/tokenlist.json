@@ -1,12 +1,12 @@
 {
   "name": "ZLP List",
-  "timestamp": "2026-08-16T07:04:47.334Z",
+  "timestamp": "2026-08-16T08:06:39.195Z",
   "version": {
     "major": 1,
     "minor": 0,
     "patch": 0
   },
-  "logoURI": "https://raw.githubusercontent.com/shpekov-sk/ssk-token/main/assets/logo-256.png",
+  "logoURI": "https://zalupa.world/logo-256.png",
   "keywords": [
     "personal",
     "fun"
@@ -18,7 +18,7 @@
       "name": "ZALUPA",
       "symbol": "ZLP",
       "decimals": 18,
-      "logoURI": "https://raw.githubusercontent.com/shpekov-sk/ssk-token/main/assets/logo-256.png"
+      "logoURI": "https://zalupa.world/logo-256.png"
     }
   ]
 }
