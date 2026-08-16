@@ -23,6 +23,7 @@ import {
   formatEther,
   formatUnits,
   getAddress,
+  isAddress,
   parseAbi,
   parseUnits,
 } from 'viem'
@@ -32,6 +33,7 @@ import { artifact } from '../test/harness.mjs'
 import { normalizePrivateKey } from './key.mjs'
 import { transportFor } from './rpc.mjs'
 import { waitUntil } from './wait.mjs'
+import { quoteExactBuy, EXACT_SWAP_ABI } from './swap.mjs'
 import { validateTokenParams, visible } from './token-params.mjs'
 
 const BASE = {
@@ -48,7 +50,7 @@ const fail = (message) => {
   process.exit(1)
 }
 
-const { PRIVATE_KEY, RPC_URL, ETHERSCAN_API_KEY, POOL_TOKENS = '0.3', TARGET_PRICE_USD = '1' } = process.env
+const { PRIVATE_KEY, RPC_URL, ETHERSCAN_API_KEY, TOKEN_ADDRESS, POOL_TOKENS = '0.3', TARGET_PRICE_USD = '1' } = process.env
 
 const key = normalizePrivateKey(PRIVATE_KEY)
 if (key.error) fail(`ключ не подходит: ${key.error}`)
@@ -60,6 +62,7 @@ const publicClient = createPublicClient({ chain, transport })
 const walletClient = createWalletClient({ account, chain, transport })
 
 const ERC20 = parseAbi([
+  'function name() view returns (string)',
   'function symbol() view returns (string)',
   'function decimals() view returns (uint8)',
   'function balanceOf(address) view returns (uint256)',
@@ -77,6 +80,7 @@ const ROUTER = parseAbi([
   'function removeLiquidityETH(address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) returns (uint256, uint256)',
   'function swapExactETHForTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline) payable returns (uint256[])',
   'function addLiquidity(address tokenA, address tokenB, uint256 amountADesired, uint256 amountBDesired, uint256 amountAMin, uint256 amountBMin, address to, uint256 deadline) returns (uint256, uint256, uint256)',
+  ...EXACT_SWAP_ABI,
 ])
 
 const read = (address, abi, functionName, args) => publicClient.readContract({ address, abi, functionName, args })
@@ -99,31 +103,56 @@ const ask = async (question, fallback) => {
 // бессмысленно, а проверить ввод можно и без него.
 console.log(`кошелёк: ${account.address}\n`)
 
+// Если токен уже задеплоен предыдущим запуском, его адрес передают через
+// TOKEN_ADDRESS — иначе повторный прогон после сбоя выпустил бы второй токен
+// и сжёг газ впустую.
 let params
-while (true) {
-  const name = await ask('имя токена: ')
-  const symbol = await ask('тикер: ')
-  const decimals = await ask('decimals [18]: ', '18')
-  const supply = await ask('эмиссия [1000000]: ', '1000000')
+let existingToken = null
 
-  const result = validateTokenParams({ name, symbol, decimals, supply })
-  if (result.error) {
-    console.log(`\n${result.error}\n`)
-    continue
+if (TOKEN_ADDRESS) {
+  if (!isAddress(TOKEN_ADDRESS)) fail(`TOKEN_ADDRESS не похож на адрес: ${TOKEN_ADDRESS}`)
+  existingToken = getAddress(TOKEN_ADDRESS)
+
+  const code = await publicClient.getCode({ address: existingToken })
+  if (!code || code === '0x') fail(`по адресу ${existingToken} нет кода — токен там не задеплоен`)
+
+  const [name, symbol, decimals, balance] = [
+    await read(existingToken, ERC20, 'name'),
+    await read(existingToken, ERC20, 'symbol'),
+    await read(existingToken, ERC20, 'decimals'),
+    await read(existingToken, ERC20, 'balanceOf', [account.address]),
+  ]
+
+  params = { name, symbol, decimals: Number(decimals), supply: formatUnits(balance, Number(decimals)), warnings: [] }
+  console.log(`токен уже задеплоен: ${existingToken}`)
+  console.log(`  ${name} (${symbol}), ${params.decimals} decimals, на балансе ${params.supply}`)
+  console.log(`деплой пропускается\n`)
+} else {
+  while (true) {
+    const name = await ask('имя токена: ')
+    const symbol = await ask('тикер: ')
+    const decimals = await ask('decimals [18]: ', '18')
+    const supply = await ask('эмиссия [1000000]: ', '1000000')
+
+    const result = validateTokenParams({ name, symbol, decimals, supply })
+    if (result.error) {
+      console.log(`\n${result.error}\n`)
+      continue
+    }
+
+    console.log(`\nимя:      ${visible(result.name)}`)
+    console.log(`тикер:    ${visible(result.symbol)}`)
+    console.log(`decimals: ${result.decimals}`)
+    console.log(`эмиссия:  ${result.supply}`)
+    for (const warning of result.warnings) console.log(`  ! ${warning}`)
+
+    const confirm = await ask('\nвсё верно? имя пишется в контракт навсегда [да/нет]: ')
+    if (/^(да|д|yes|y)$/i.test(confirm)) {
+      params = result
+      break
+    }
+    console.log('')
   }
-
-  console.log(`\nимя:      ${visible(result.name)}`)
-  console.log(`тикер:    ${visible(result.symbol)}`)
-  console.log(`decimals: ${result.decimals}`)
-  console.log(`эмиссия:  ${result.supply}`)
-  for (const warning of result.warnings) console.log(`  ! ${warning}`)
-
-  const confirm = await ask('\nвсё верно? имя пишется в контракт навсегда [да/нет]: ')
-  if (/^(да|д|yes|y)$/i.test(confirm)) {
-    params = result
-    break
-  }
-  console.log('')
 }
 
 const supplyUnits = parseUnits(params.supply, params.decimals)
@@ -206,32 +235,53 @@ if (oldLp > 0n) {
   })
 }
 
-// 2. деплой
-const { abi, bytecode } = artifact('FixedSupplyToken')
-const args = [params.name, params.symbol, params.decimals, supplyUnits, account.address]
+// 2. деплой (или переиспользование уже задеплоенного)
+let token = existingToken
 
-process.stdout.write('деплой токена... ')
-const deployHash = await walletClient.deployContract({ abi, bytecode, args })
-const deployReceipt = await publicClient.waitForTransactionReceipt({ hash: deployHash })
-if (deployReceipt.status !== 'success') fail(`деплой не прошёл: ${deployHash}`)
-const token = getAddress(deployReceipt.contractAddress)
-console.log(`ок`)
-console.log(`\nновый токен: ${token}`)
-console.log(`explorer:    https://basescan.org/token/${token}\n`)
+if (!token) {
+  const { abi, bytecode } = artifact('FixedSupplyToken')
+  const args = [params.name, params.symbol, params.decimals, supplyUnits, account.address]
+
+  process.stdout.write('деплой токена... ')
+  const deployHash = await walletClient.deployContract({ abi, bytecode, args })
+  const deployReceipt = await publicClient.waitForTransactionReceipt({ hash: deployHash })
+  if (deployReceipt.status !== 'success') fail(`деплой не прошёл: ${deployHash}`)
+  token = getAddress(deployReceipt.contractAddress)
+  console.log(`ок`)
+  console.log(`\nновый токен: ${token}`)
+  console.log(`explorer:    https://basescan.org/token/${token}`)
+  console.log(`\nесли дальше что-то упадёт, повтори запуск с TOKEN_ADDRESS=${token} —`)
+  console.log(`тогда деплой не повторится.\n`)
+}
 
 // 3. USDC
 const usdcBalance = await read(getAddress(BASE.usdc), ERC20, 'balanceOf', [account.address])
 if (usdcBalance < poolUsdc) {
   const needed = poolUsdc - usdcBalance
-  // Пул WETH/USDC глубже миллиона, проскальзывание на центах несущественно;
-  // 20% запаса на движение цены между симуляцией и включением в блок.
-  const ethIn = (needed * 12n * 10n ** 12n) / 10n
+  const path = [getAddress(BASE.weth), getAddress(BASE.usdc)]
+
+  // Сколько ETH нужно — считает роутер по своим резервам. Курс тут не участвует:
+  // на попытке посчитать его руками скрипт однажды запросил в 1882 раза больше.
+  const { required, value } = await quoteExactBuy({
+    publicClient,
+    router: getAddress(BASE.router),
+    abi: ROUTER,
+    path,
+    amountOut: needed,
+  })
+
+  console.log(`нужно ${formatEther(required)} ETH за ${formatUnits(needed, 6)} USDC`)
+  if (nativeBalance < value) {
+    fail(`не хватает ETH: нужно ~${formatEther(value)}, есть ${formatEther(nativeBalance)}`)
+  }
+
+  // swapETHForExactTokens берёт ровно нужное и возвращает остаток, поэтому запас безопасен.
   await send(`обмен ETH на ${formatUnits(needed, 6)} USDC`, {
     address: getAddress(BASE.router),
     abi: ROUTER,
-    functionName: 'swapExactETHForTokens',
-    args: [needed, [getAddress(BASE.weth), getAddress(BASE.usdc)], account.address, await deadline()],
-    value: ethIn,
+    functionName: 'swapETHForExactTokens',
+    args: [needed, path, account.address, await deadline()],
+    value,
   })
 }
 

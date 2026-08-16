@@ -29,6 +29,7 @@ import { normalizePrivateKey } from './key.mjs'
 import { readEnv } from './env.mjs'
 import { transportFor } from './rpc.mjs'
 import { waitUntil } from './wait.mjs'
+import { quoteExactBuy, EXACT_SWAP_ABI } from './swap.mjs'
 
 const BASE = {
   router: '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24',
@@ -88,6 +89,7 @@ const ROUTER = parseAbi([
   'function removeLiquidityETH(address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) returns (uint256, uint256)',
   'function swapExactETHForTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline) payable returns (uint256[])',
   'function addLiquidity(address tokenA, address tokenB, uint256 amountADesired, uint256 amountBDesired, uint256 amountAMin, uint256 amountBMin, address to, uint256 deadline) returns (uint256, uint256, uint256)',
+  ...EXACT_SWAP_ABI,
 ])
 
 const read = (address, abi, functionName, args) =>
@@ -207,15 +209,27 @@ if (lp > 0n) {
 const usdcBalance = await read(usdc, ERC20, 'balanceOf', [account.address])
 if (usdcBalance < poolUsdc) {
   const needed = poolUsdc - usdcBalance
-  // Пул WETH/USDC глубокий (>$1M), поэтому проскальзывание на таких суммах не важно;
-  // с запасом в 20% на движение цены между симуляцией и отправкой.
-  const ethIn = (needed * 12n * 10n ** 12n) / 10n
+  const path = [weth, usdc]
+
+  // Нужный ETH считает роутер: попытка вывести его из курса руками стоила нам
+  // запроса в 1882 раза больше нужного и падения с OutOfFunds.
+  const { required, value } = await quoteExactBuy({
+    publicClient,
+    router,
+    abi: ROUTER,
+    path,
+    amountOut: needed,
+  })
+
+  console.log(`нужно ${formatEther(required)} ETH за ${formatUnits(needed, 6)} USDC`)
+  if (nativeBalance < value) fail(`не хватает ETH: нужно ~${formatEther(value)}, есть ${formatEther(nativeBalance)}`)
+
   await send(`обмен ETH на ${formatUnits(needed, 6)} USDC`, {
     address: router,
     abi: ROUTER,
-    functionName: 'swapExactETHForTokens',
-    args: [needed, [weth, usdc], account.address, await deadline()],
-    value: ethIn,
+    functionName: 'swapETHForExactTokens',
+    args: [needed, path, account.address, await deadline()],
+    value,
   })
 }
 
