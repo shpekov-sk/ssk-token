@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ZALUPA (ZLP) — токен в сети Base</title>
+    <meta name="description" content="ZALUPA (ZLP) — ERC-20 в сети Base с фиксированной эмиссией. Без владельца, без допэмиссии, исходники верифицированы." />
+    <link rel="icon" href="logo-32.png" />
+
+    <meta property="og:title" content="ZALUPA (ZLP)" />
+    <meta property="og:description" content="ERC-20 в сети Base. Фиксированная эмиссия, без владельца, код верифицирован." />
+    <meta property="og:image" content="https://zalupa.world/logo-256.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+
+    <style>
+      :root {
+        --bg: #0a0511;
+        --card: #150c24;
+        --line: #2b1c47;
+        --violet: #a855f7;
+        --text: #f5f0ff;
+        --muted: #9a8bb8;
+        --dim: #6f6091;
+        --ok: #4ade80;
+      }
+
+      * { box-sizing: border-box; margin: 0; }
+
+      body {
+        min-height: 100vh;
+        padding: 48px 20px 64px;
+        background: radial-gradient(1000px 560px at 50% -12%, #2a1148 0%, transparent 70%), var(--bg);
+        color: var(--text);
+        font: 400 16px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main { width: min(560px, 100%); margin: 0 auto; }
+
+      header { text-align: center; margin-bottom: 40px; }
+
+      .logo {
+        width: 128px; height: 128px; border-radius: 50%;
+        display: block; margin: 0 auto 24px;
+        filter: drop-shadow(0 0 34px rgba(168, 85, 247, 0.5));
+      }
+
+      h1 { font-size: 34px; letter-spacing: -0.02em; font-weight: 700; }
+
+      .ticker {
+        margin-top: 8px; font-size: 14px; font-weight: 600;
+        letter-spacing: 0.16em; text-transform: uppercase; color: var(--violet);
+      }
+
+      .card {
+        border: 1px solid var(--line); border-radius: 20px;
+        background: linear-gradient(180deg, var(--card), #100819);
+        padding: 26px 24px; margin-bottom: 20px;
+      }
+
+      .price { text-align: center; }
+      .price .value {
+        font-size: 46px; font-weight: 700; letter-spacing: -0.03em;
+        font-variant-numeric: tabular-nums;
+      }
+      .price .label { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+      dl { display: grid; gap: 1px; margin-top: 22px; }
+      .row {
+        display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+        padding: 11px 2px; border-bottom: 1px solid rgba(43, 28, 71, 0.55); font-size: 14.5px;
+      }
+      .row:last-child { border-bottom: 0; }
+      dt { color: var(--muted); }
+      dd { font-variant-numeric: tabular-nums; text-align: right; }
+      .ok { color: var(--ok); }
+
+      .addr {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12.5px; word-break: break-all; text-align: left;
+        color: var(--text); background: rgba(168, 85, 247, 0.08);
+        border: 1px solid var(--line); border-radius: 10px;
+        padding: 12px 14px; margin-top: 10px; cursor: pointer;
+        transition: border-color 0.15s;
+      }
+      .addr:hover { border-color: var(--violet); }
+      .addr[data-copied="1"] { border-color: var(--ok); }
+
+      .actions { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; margin-top: 18px; }
+
+      button, .link {
+        appearance: none; border: 1px solid var(--line); border-radius: 12px;
+        background: rgba(168, 85, 247, 0.1); color: var(--text);
+        font: inherit; font-size: 14.5px; padding: 12px 14px;
+        text-align: center; text-decoration: none; cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      button:hover, .link:hover { border-color: var(--violet); background: rgba(168, 85, 247, 0.18); }
+      button:disabled { opacity: 0.5; cursor: default; }
+
+      .links { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+
+      .note {
+        font-size: 12.5px; line-height: 1.5; color: var(--dim);
+        border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px;
+      }
+      .note b { color: var(--muted); font-weight: 600; }
+      .note p + p { margin-top: 9px; }
+
+      footer { margin-top: 26px; text-align: center; font-size: 12px; color: var(--dim); }
+      footer a { color: var(--muted); }
+
+      @media (max-width: 420px) {
+        .actions, .links { grid-template-columns: 1fr; }
+        h1 { font-size: 28px; }
+        .price .value { font-size: 38px; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <header>
+        <img class="logo" src="logo-256.png" alt="ZALUPA" />
+        <h1>ZALUPA</h1>
+        <p class="ticker">ZLP · Base</p>
+      </header>
+
+      <section class="card">
+        <div class="price">
+          <div class="value" id="price">—</div>
+          <div class="label" id="price-label">цена из пула Uniswap</div>
+        </div>
+
+        <dl>
+          <div class="row"><dt>Эмиссия</dt><dd id="supply">1 000 000 ZLP</dd></div>
+          <div class="row"><dt>Ликвидность в пуле</dt><dd id="liquidity">—</dd></div>
+          <div class="row"><dt>Допэмиссия</dt><dd>невозможна, mint отсутствует</dd></div>
+          <div class="row"><dt>Владелец контракта</dt><dd>отсутствует</dd></div>
+          <div class="row"><dt>Исходники</dt><dd class="ok">верифицированы</dd></div>
+        </dl>
+
+        <div class="addr" id="addr" title="нажми, чтобы скопировать">
+          0x3fbA88B5633FF26A3969e6847b5dAFa4108a6FFB
+        </div>
+
+        <div class="actions">
+          <button id="copy">Скопировать адрес</button>
+          <button id="add">Добавить в кошелёк</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="links">
+          <a class="link" href="https://basescan.org/token/0x3fbA88B5633FF26A3969e6847b5dAFa4108a6FFB">Basescan</a>
+          <a class="link" href="https://dexscreener.com/base/0xe058bcb6198450f23666bfe081351555aeeeb8ec">DexScreener</a>
+          <a class="link" href="https://www.geckoterminal.com/base/pools/0xe058bcb6198450f23666bfe081351555aeeeb8ec">GeckoTerminal</a>
+          <a class="link" href="https://github.com/shpekov-sk/ssk-token">Исходники</a>
+        </div>
+      </section>
+
+      <section class="note">
+        <p>
+          <b>Чем этот токен не является.</b> Обеспечения у него нет: обменять ZLP на доллар
+          не у кого и не за что. Цена — это отношение резервов в пуле Uniswap, а не привязка
+          к чему-либо.
+        </p>
+        <p>
+          <b>Ликвидность крайне мала.</b> В пуле меньше доллара. Любая заметная покупка или
+          продажа сдвинет цену в разы, а вывести из пула больше, чем в нём лежит, невозможно.
+          Показатель FDV получается умножением цены на всю эмиссию и осмысленной величиной
+          не является.
+        </p>
+        <p>
+          <b>Проверяйте адрес.</b> Единственный настоящий идентификатор токена — адрес
+          контракта выше. Имя и тикер в ERC-20 не уникальны, их может выпустить кто угодно.
+        </p>
+        <p>
+          Учебный проект. Не предложение покупки и не финансовая рекомендация.
+        </p>
+      </section>
+
+      <footer>
+        Код и вся математика открыты:
+        <a href="https://github.com/shpekov-sk/ssk-token">github.com/shpekov-sk/ssk-token</a>
+      </footer>
+    </main>
+
+    <script type="module">
+      const TOKEN = '0x3fbA88B5633FF26A3969e6847b5dAFa4108a6FFB'
+      const PAIR = '0xe058bcb6198450f23666bfe081351555aeeeb8ec'
+      const DECIMALS = 18
+      const ENDPOINTS = ['https://mainnet.base.org', 'https://base-rpc.publicnode.com', 'https://base.llamarpc.com']
+
+      const ru = (value, digits = 0) =>
+        value.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+
+      async function call(to, data) {
+        for (const url of ENDPOINTS) {
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }),
+            })
+            const body = await response.json()
+            if (typeof body.result === 'string' && body.result !== '0x') return body.result
+          } catch {}
+        }
+        return null
+      }
+
+      // Цена и глубина читаются из резервов пары: getReserves и token0.
+      try {
+        const [reserves, token0] = await Promise.all([call(PAIR, '0x0902f1ac'), call(PAIR, '0x0dfe1681')])
+        if (!reserves || !token0) throw new Error('нет ответа от сети')
+
+        const r0 = BigInt('0x' + reserves.slice(2, 66))
+        const r1 = BigInt('0x' + reserves.slice(66, 130))
+        const tokenIsZero = '0x' + token0.slice(-40) === TOKEN.toLowerCase()
+
+        const tokens = Number(tokenIsZero ? r0 : r1) / 10 ** DECIMALS
+        const usdc = Number(tokenIsZero ? r1 : r0) / 1e6
+        const price = usdc / tokens
+
+        document.getElementById('price').textContent = `$${ru(price, 4)}`
+        document.getElementById('price-label').textContent = 'цена из пула Uniswap, обновлено сейчас'
+        document.getElementById('liquidity').textContent = `$${ru(usdc * 2, 2)}`
+      } catch {
+        document.getElementById('price-label').textContent = 'сеть недоступна — цену смотри на DexScreener'
+      }
+
+      // Копирование адреса
+      const addr = document.getElementById('addr')
+      const copy = async () => {
+        try {
+          await navigator.clipboard.writeText(TOKEN)
+          addr.dataset.copied = '1'
+          document.getElementById('copy').textContent = 'Скопировано'
+          setTimeout(() => {
+            addr.dataset.copied = ''
+            document.getElementById('copy').textContent = 'Скопировать адрес'
+          }, 1600)
+        } catch {}
+      }
+      addr.addEventListener('click', copy)
+      document.getElementById('copy').addEventListener('click', copy)
+
+      // Добавление в кошелёк одним нажатием: EIP-747.
+      const add = document.getElementById('add')
+      if (!window.ethereum) {
+        add.disabled = true
+        add.textContent = 'Кошелёк не найден'
+      } else {
+        add.addEventListener('click', async () => {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_watchAsset',
+              params: {
+                type: 'ERC20',
+                options: {
+                  address: TOKEN,
+                  symbol: 'ZLP',
+                  decimals: DECIMALS,
+                  image: 'https://zalupa.world/logo-256.png',
+                },
+              },
+            })
+            add.textContent = 'Добавлено'
+          } catch {
+            add.textContent = 'Отклонено кошельком'
+          }
+        })
+      }
+    </script>
+  </body>
+</html>
