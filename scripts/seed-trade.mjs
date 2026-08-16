@@ -10,7 +10,7 @@
 // задаётся руками. В пуле глубиной меньше доллара «куплю на копейку» легко
 // оказывается покупкой на треть пула.
 import * as chains from 'viem/chains'
-import { createPublicClient, createWalletClient, formatUnits, getAddress, parseAbi } from 'viem'
+import { createPublicClient, createWalletClient, formatEther, formatUnits, getAddress, parseAbi } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { createInterface } from 'node:readline/promises'
 import { normalizePrivateKey } from './key.mjs'
@@ -61,8 +61,11 @@ const PAIR = parseAbi([
   'function token0() view returns (address)',
 ])
 const ROUTER = parseAbi([
-  'function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline) returns (uint256[])',
+  'function getAmountsIn(uint256 amountOut, address[] path) view returns (uint256[])',
+  'function getAmountsOut(uint256 amountIn, address[] path) view returns (uint256[])',
+  'function swapExactETHForTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline) payable returns (uint256[])',
 ])
+const WETH = getAddress('0x4200000000000000000000000000000000000006')
 
 const read = (address, abi, functionName, args) => publicClient.readContract({ address, abi, functionName, args })
 
@@ -79,25 +82,29 @@ const tokenIsZero = getAddress(token0) === token
 const tokenReserve = tokenIsZero ? r0 : r1
 const usdcReserve = tokenIsZero ? r1 : r0
 
-const usdcBalance = await read(usdc, ERC20, 'balanceOf', [account.address])
+const nativeBalance = await publicClient.getBalance({ address: account.address })
 
 // ---------- размер сделки ----------
+// Ограничение считается по пулу токен/USDC: первый хоп идёт через WETH/USDC
+// глубиной больше миллиона, там влияние пренебрежимо.
 const maxImpact = Number(MAX_IMPACT_BPS)
-const withinLimit = largestTradeWithin({
+const usdcIn = largestTradeWithin({
   reserveIn: usdcReserve,
   reserveOut: tokenReserve,
   maxImpactBps: maxImpact,
 })
 
-const amountIn = withinLimit < usdcBalance ? withinLimit : usdcBalance
-if (amountIn <= 0n) {
-  fail(
-    `под лимит ${maxImpact} bps ничего не влезает, либо на кошельке нет USDC.\n` +
-      `USDC на балансе: ${formatUnits(usdcBalance, 6)}`,
-  )
-}
+if (usdcIn <= 0n) fail(`под лимит ${maxImpact} bps не влезает даже минимальная сделка`)
 
-const impact = impactOf({ reserveIn: usdcReserve, reserveOut: tokenReserve, amountIn })
+const impact = impactOf({ reserveIn: usdcReserve, reserveOut: tokenReserve, amountIn: usdcIn })
+
+// Покупаем за ETH: USDC на кошельке не нужен, approve тоже — ETH его не требует.
+const path = [WETH, usdc, token]
+const ethIn = (await read(router, ROUTER, 'getAmountsIn', [usdcIn, [WETH, usdc]]))[0]
+if (ethIn <= 0n) fail('роутер вернул нулевой вход — путь обмена не работает')
+
+const expected = (await read(router, ROUTER, 'getAmountsOut', [ethIn, path]))[2]
+
 const priceBefore = Number(formatUnits(usdcReserve, 6)) / Number(formatUnits(tokenReserve, decimals))
 const priceAfter =
   Number(formatUnits(impact.reserveInAfter, 6)) / Number(formatUnits(impact.reserveOutAfter, decimals))
@@ -105,13 +112,17 @@ const priceAfter =
 console.log(`пара:      ${pair}`)
 console.log(`в пуле:    ${formatUnits(tokenReserve, decimals)} ${symbol} и ${formatUnits(usdcReserve, 6)} USDC`)
 console.log(`цена:      $${priceBefore.toFixed(6)}`)
-console.log(`USDC есть: ${formatUnits(usdcBalance, 6)}`)
+console.log(`ETH есть:  ${formatEther(nativeBalance)}`)
 
-console.log(`\nсделка под лимит ${maxImpact} bps:`)
-console.log(`  вложить    ${formatUnits(amountIn, 6)} USDC`)
-console.log(`  получить   ${formatUnits(impact.received, decimals)} ${symbol}`)
+console.log(`\nсделка под лимит ${maxImpact} bps, путь WETH -> USDC -> ${symbol}:`)
+console.log(`  вложить    ${formatEther(ethIn)} ETH  (~${formatUnits(usdcIn, 6)} USDC во втором хопе)`)
+console.log(`  получить   ${formatUnits(expected, decimals)} ${symbol}`)
 console.log(`  цена после $${priceAfter.toFixed(6)}  (сдвиг ${impact.impactBps} bps)`)
 console.log(`\nпосле этого DexScreener подхватит пару — ему нужен факт сделки.`)
+
+if (nativeBalance < ethIn * 2n) {
+  fail(`ETH мало: нужно ${formatEther(ethIn)} плюс газ, есть ${formatEther(nativeBalance)}`)
+}
 
 if (CONFIRM !== 'yes') fail('для отправки нужен CONFIRM=yes')
 
@@ -137,25 +148,14 @@ const send = async (label, call) => {
   console.log(`ок (${receipt.gasUsed} газа)`)
 }
 
-// approve с ожиданием распространения: узлы в фолбэке расходятся на блок.
-const allowance = await read(usdc, ERC20, 'allowance', [account.address, router])
-if (allowance < amountIn) {
-  await send('approve USDC', { address: usdc, abi: ERC20, functionName: 'approve', args: [router, amountIn] })
-  await waitUntil({
-    read: () => read(usdc, ERC20, 'allowance', [account.address, router]),
-    ok: (value) => value >= amountIn,
-    attempts: 20,
-    delayMs: 3000,
-  }).catch(() => fail('allowance не появился в сети — запусти снова'))
-}
-
-// Проскальзывание 5%: пул тонкий, между симуляцией и блоком цена может уехать.
-const minOut = (impact.received * 95n) / 100n
-await send(`покупка ${symbol}`, {
+// Проскальзывание 10%: пул тонкий, между симуляцией и блоком цена может уехать,
+// а суммы тут настолько мелкие, что терять нечего.
+await send(`покупка ${symbol} за ETH`, {
   address: router,
   abi: ROUTER,
-  functionName: 'swapExactTokensForTokens',
-  args: [amountIn, minOut, [usdc, token], account.address, await deadline()],
+  functionName: 'swapExactETHForTokens',
+  args: [(expected * 90n) / 100n, path, account.address, await deadline()],
+  value: ethIn,
 })
 
 const [f0, f1] = await read(pair, PAIR, 'getReserves')
