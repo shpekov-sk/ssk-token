@@ -14,8 +14,7 @@ import { createPublicClient, http, isAddress, getAddress, decodeAbiParameters } 
 import { artifact } from '../test/harness.mjs'
 import { buildStandardInput, SOLC_VERSION } from './standard-input.mjs'
 import { findCreation } from './creation.mjs'
-
-const API = 'https://api.etherscan.io/v2/api'
+import { buildVerifyRequest, buildStatusRequest } from './verify-request.mjs'
 
 const { ETHERSCAN_API_KEY, TOKEN_ADDRESS, CHAIN = 'base', RPC_URL } = process.env
 
@@ -60,20 +59,15 @@ const standardInput = buildStandardInput()
 console.log(`\nисходники: ${Object.keys(standardInput.sources).length} файлов`)
 console.log(`solc:      ${SOLC_VERSION}\n`)
 
-const body = new URLSearchParams({
-  chainid: String(chain.id),
-  module: 'contract',
-  action: 'verifysourcecode',
-  apikey: ETHERSCAN_API_KEY,
-  contractaddress: address,
-  sourceCode: JSON.stringify(standardInput),
-  codeformat: 'solidity-standard-json-input',
-  contractname: 'contracts/FixedSupplyToken.sol:FixedSupplyToken',
-  compilerversion: SOLC_VERSION,
-  constructorArguements: creation.constructorArgs, // опечатка в имени — со стороны API
+const request = buildVerifyRequest({
+  chainId: chain.id,
+  apiKey: ETHERSCAN_API_KEY,
+  address,
+  standardInput,
+  constructorArgs: creation.constructorArgs,
 })
 
-const submit = await (await fetch(API, { method: 'POST', body })).json()
+const submit = await (await fetch(request.url, { method: 'POST', body: request.body })).json()
 if (submit.status !== '1') fail(`не приняли на верификацию: ${submit.result}`)
 
 const guid = submit.result
@@ -85,14 +79,8 @@ for (let attempt = 0; attempt < 30; attempt++) {
   await new Promise((done) => setTimeout(done, 5000))
   process.stdout.write('.')
 
-  const query = new URLSearchParams({
-    chainid: String(chain.id),
-    module: 'contract',
-    action: 'checkverifystatus',
-    guid,
-    apikey: ETHERSCAN_API_KEY,
-  })
-  const check = await (await fetch(`${API}?${query}`)).json()
+  const status = buildStatusRequest({ chainId: chain.id, apiKey: ETHERSCAN_API_KEY, guid })
+  const check = await (await fetch(status)).json()
 
   if (check.result === 'Pending in queue') continue
   console.log('')
