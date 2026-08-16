@@ -15,7 +15,7 @@ import { artifact } from '../test/harness.mjs'
 import { buildStandardInput, SOLC_VERSION } from './standard-input.mjs'
 import { addressFrom } from './address.mjs'
 import { findCreation } from './creation.mjs'
-import { buildVerifyRequest, buildStatusRequest } from './verify-request.mjs'
+import { buildVerifyRequest, buildStatusRequest, buildSourceRequest, classifyStatus } from './verify-request.mjs'
 import { transportFor } from './rpc.mjs'
 
 const { ETHERSCAN_API_KEY, TOKEN_ADDRESS, CHAIN = 'base', RPC_URL } = process.env
@@ -36,6 +36,22 @@ const address = parsedAddress.address
 
 console.log(`сеть:      ${chain.name} (${chain.id})`)
 console.log(`контракт:  ${address}`)
+
+// Etherscan сопоставляет байткод и помечает верифицированным любой контракт с
+// тем же кодом. Поэтому второй токен из того же исходника оказывается
+// верифицирован сам собой — проверяем до отправки.
+const existing = await (await fetch(buildSourceRequest({ chainId: chain.id, apiKey: ETHERSCAN_API_KEY, address })))
+  .json()
+  .catch(() => null)
+
+const alreadyVerified = existing?.status === '1' && String(existing.result?.[0]?.SourceCode ?? '') !== ''
+if (alreadyVerified) {
+  const explorer = chain.blockExplorers?.default?.url
+  console.log(`\nисходники уже верифицированы — Etherscan сопоставил байткод сам.`)
+  console.log(`контракт: ${existing.result[0].ContractName}`)
+  if (explorer) console.log(`${explorer}/address/${address}#code`)
+  process.exit(0)
+}
 
 // ---------- аргументы конструктора из транзакции создания ----------
 const { abi, bytecode } = artifact('FixedSupplyToken')
@@ -84,14 +100,15 @@ for (let attempt = 0; attempt < 30; attempt++) {
 
   const status = buildStatusRequest({ chainId: chain.id, apiKey: ETHERSCAN_API_KEY, guid })
   const check = await (await fetch(status)).json()
+  const verdict = classifyStatus(check)
 
-  if (check.result === 'Pending in queue') continue
+  if (verdict === 'pending') continue
   console.log('')
 
-  if (check.status === '1') {
-    const explorer = chain.blockExplorers?.default?.url
-    console.log(`\nготово: ${check.result}`)
-    if (explorer) console.log(`${explorer}/address/${parsedAddress.address}#code`)
+  const explorer = chain.blockExplorers?.default?.url
+  if (verdict === 'success' || verdict === 'already') {
+    console.log(verdict === 'already' ? `\nуже верифицирован: Etherscan сопоставил байткод` : `\nготово: ${check.result}`)
+    if (explorer) console.log(`${explorer}/address/${address}#code`)
     process.exit(0)
   }
   fail(`\nне прошло: ${check.result}`)

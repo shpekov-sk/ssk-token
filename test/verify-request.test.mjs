@@ -2,7 +2,14 @@
 // то, на чём верификация уже спотыкалась — где именно лежат параметры.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildVerifyRequest, buildStatusRequest, CONTRACT_NAME, API } from '../scripts/verify-request.mjs'
+import {
+  buildVerifyRequest,
+  buildStatusRequest,
+  buildSourceRequest,
+  classifyStatus,
+  CONTRACT_NAME,
+  API,
+} from '../scripts/verify-request.mjs'
 import { buildStandardInput, SOLC_VERSION } from '../scripts/standard-input.mjs'
 
 const BASE = {
@@ -60,4 +67,33 @@ test('запрос статуса тоже несёт chainid в query', () => {
 test('пустые аргументы конструктора не ломают запрос', () => {
   const { body } = buildVerifyRequest({ ...BASE, constructorArgs: '' })
   assert.equal(body.get('constructorArguements'), '')
+})
+
+test('«Already Verified» — это успех, а не провал', () => {
+  // Приходит со status '0', и на этом скрипт однажды напечатал «не прошло».
+  assert.equal(classifyStatus({ status: '0', result: 'Already Verified' }), 'already')
+  assert.equal(classifyStatus({ status: '1', result: 'Already Verified' }), 'already')
+})
+
+test('очередь отличается от результата', () => {
+  assert.equal(classifyStatus({ status: '0', result: 'Pending in queue' }), 'pending')
+})
+
+test('успех и провал различаются по статусу', () => {
+  assert.equal(classifyStatus({ status: '1', result: 'Pass - Verified' }), 'success')
+  assert.equal(classifyStatus({ status: '0', result: 'Fail - Unable to verify' }), 'failed')
+})
+
+test('пустой ответ считается провалом, а не успехом', () => {
+  assert.equal(classifyStatus(undefined), 'failed')
+  assert.equal(classifyStatus({}), 'failed')
+})
+
+test('запрос исходников несёт chainid в query и адрес', () => {
+  const url = buildSourceRequest({ chainId: 8453, apiKey: 'k', address: '0xabc' })
+  const params = new URL(url).searchParams
+
+  assert.equal(params.get('chainid'), '8453')
+  assert.equal(params.get('action'), 'getsourcecode')
+  assert.equal(params.get('address'), '0xabc')
 })

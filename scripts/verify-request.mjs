@@ -41,3 +41,30 @@ export function buildStatusRequest({ chainId, apiKey, guid }) {
     apikey: apiKey,
   })}`
 }
+
+/** Запрос состояния верификации: есть ли уже исходники по адресу. */
+export function buildSourceRequest({ chainId, apiKey, address }) {
+  return `${API}?${new URLSearchParams({
+    chainid: String(chainId),
+    module: 'contract',
+    action: 'getsourcecode',
+    address,
+    apikey: apiKey,
+  })}`
+}
+
+/**
+ * Что означает ответ checkverifystatus.
+ *
+ * «Already Verified» приходит со status !== '1', хотя это успех: Etherscan
+ * сопоставляет байткод и помечает верифицированным любой контракт с тем же
+ * кодом. У нас так и вышло — второй токен из того же FixedSupplyToken.
+ */
+export function classifyStatus(check) {
+  const result = String(check?.result ?? '')
+
+  if (/pending in queue/i.test(result)) return 'pending'
+  if (/already verified/i.test(result)) return 'already'
+  if (check?.status === '1') return 'success'
+  return 'failed'
+}
