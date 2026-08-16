@@ -12,7 +12,8 @@
     "verify": "node scripts/verify.mjs",
     "token-list": "node scripts/token-list.mjs",
     "sigil": "node scripts/print.mjs",
-    "mine": "node scripts/mine.mjs"
+    "mine": "node scripts/mine.mjs",
+    "pool": "node scripts/add-liquidity.mjs"
   },
   "keywords": [],
   "author": "",
