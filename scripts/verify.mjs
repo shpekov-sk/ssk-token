@@ -4,23 +4,20 @@
 //   ETHERSCAN_API_KEY=... TOKEN_ADDRESS=0x... CHAIN=base node scripts/verify.mjs
 //
 // Ключ бесплатный: etherscan.io/myapikey (один ключ работает для всех сетей V2).
+//
+// Аргументы конструктора не задаются руками: они читаются из транзакции создания
+// контракта обычным RPC. Угадывать их по дефолтам нельзя — разойдутся с реальным
+// деплоем хоть в одном символе, и верификация отклоняется без объяснений.
+// Платный getcontractcreation у Etherscan для этого не нужен.
 import * as chains from 'viem/chains'
-import { isAddress, getAddress, encodeAbiParameters, parseUnits } from 'viem'
+import { createPublicClient, http, isAddress, getAddress, decodeAbiParameters } from 'viem'
 import { artifact } from '../test/harness.mjs'
 import { buildStandardInput, SOLC_VERSION } from './standard-input.mjs'
+import { findCreation } from './creation.mjs'
 
 const API = 'https://api.etherscan.io/v2/api'
 
-const {
-  ETHERSCAN_API_KEY,
-  TOKEN_ADDRESS,
-  CHAIN = 'base',
-  TOKEN_NAME = '$$K.1',
-  TOKEN_SYMBOL = '$$K.1',
-  TOKEN_DECIMALS = '18',
-  TOKEN_SUPPLY = '1000000',
-  HOLDER,
-} = process.env
+const { ETHERSCAN_API_KEY, TOKEN_ADDRESS, CHAIN = 'base', RPC_URL } = process.env
 
 const fail = (message) => {
   console.error(message)
@@ -29,39 +26,51 @@ const fail = (message) => {
 
 if (!ETHERSCAN_API_KEY) fail('нужен ETHERSCAN_API_KEY — бесплатный ключ с etherscan.io/myapikey')
 if (!TOKEN_ADDRESS || !isAddress(TOKEN_ADDRESS)) fail('нужен TOKEN_ADDRESS=0x... — адрес контракта')
-if (!HOLDER || !isAddress(HOLDER)) fail('нужен HOLDER=0x... — адрес, получивший эмиссию при деплое')
 
 const chain = chains[CHAIN]
 if (!chain) fail(`неизвестная сеть "${CHAIN}"`)
 
-const standardInput = buildStandardInput()
-
-// Аргументы конструктора: тот же ABI-кодинг, что при деплое, но без селектора.
-const { abi } = artifact('FixedSupplyToken')
-const ctor = abi.find((item) => item.type === 'constructor')
-const constructorArgs = encodeAbiParameters(ctor.inputs, [
-  TOKEN_NAME,
-  TOKEN_SYMBOL,
-  Number(TOKEN_DECIMALS),
-  parseUnits(TOKEN_SUPPLY, Number(TOKEN_DECIMALS)),
-  getAddress(HOLDER),
-]).slice(2)
+const address = getAddress(TOKEN_ADDRESS)
 
 console.log(`сеть:      ${chain.name} (${chain.id})`)
-console.log(`контракт:  ${getAddress(TOKEN_ADDRESS)}`)
-console.log(`исходники: ${Object.keys(standardInput.sources).length} файлов\n`)
+console.log(`контракт:  ${address}`)
+
+// ---------- аргументы конструктора из транзакции создания ----------
+const { abi, bytecode } = artifact('FixedSupplyToken')
+const publicClient = createPublicClient({ chain, transport: http(RPC_URL || chain.rpcUrls.default.http[0]) })
+
+process.stdout.write('ищу транзакцию создания... ')
+const creation = await findCreation(publicClient, address, bytecode).catch((error) => fail(`\n${error.message}`))
+console.log('нашёл')
+
+const ctor = abi.find((item) => item.type === 'constructor')
+const [name, symbol, decimals, supply, holder] = decodeAbiParameters(ctor.inputs, `0x${creation.constructorArgs}`)
+
+console.log(`блок:      ${creation.blockNumber}`)
+console.log(`tx:        ${creation.txHash}`)
+console.log(`деплоер:   ${creation.creator}`)
+console.log(`\nаргументы конструктора, прочитанные из сети:`)
+console.log(`  name     "${name}"`)
+console.log(`  symbol   "${symbol}"`)
+console.log(`  decimals ${decimals}`)
+console.log(`  supply   ${supply / 10n ** BigInt(decimals)} целых`)
+console.log(`  holder   ${holder}`)
+
+const standardInput = buildStandardInput()
+console.log(`\nисходники: ${Object.keys(standardInput.sources).length} файлов`)
+console.log(`solc:      ${SOLC_VERSION}\n`)
 
 const body = new URLSearchParams({
   chainid: String(chain.id),
   module: 'contract',
   action: 'verifysourcecode',
   apikey: ETHERSCAN_API_KEY,
-  contractaddress: getAddress(TOKEN_ADDRESS),
+  contractaddress: address,
   sourceCode: JSON.stringify(standardInput),
   codeformat: 'solidity-standard-json-input',
   contractname: 'contracts/FixedSupplyToken.sol:FixedSupplyToken',
   compilerversion: SOLC_VERSION,
-  constructorArguements: constructorArgs, // опечатка в имени — со стороны API
+  constructorArguements: creation.constructorArgs, // опечатка в имени — со стороны API
 })
 
 const submit = await (await fetch(API, { method: 'POST', body })).json()
