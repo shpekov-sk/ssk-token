@@ -297,13 +297,32 @@ await send('создание пары и ликвидность', {
 })
 
 // ---------- результат ----------
-const pair = await read(getAddress(BASE.factory), FACTORY, 'getPair', [token, getAddress(BASE.usdc)])
+// Пара только что создана, а узлы в фолбэке расходятся на блок: тот, что ответит
+// на getPair, может её ещё не видеть и вернуть нулевой адрес. Транзакции при этом
+// все прошли, поэтому падать на выводе итога — худшее, что можно сделать.
+const pair = await waitUntil({
+  read: () => read(getAddress(BASE.factory), FACTORY, 'getPair', [token, getAddress(BASE.usdc)]),
+  ok: (address) => address && address !== ZERO,
+  attempts: 20,
+  delayMs: 3000,
+  onRetry: () => process.stdout.write('.'),
+}).catch(() => null)
+
+if (!pair) {
+  console.log(`\n${'-'.repeat(60)}`)
+  console.log(`Все транзакции прошли, но адрес пары сеть пока не отдаёт.`)
+  console.log(`Это не ошибка: пул создан, узел отстал. Посмотри через минуту:`)
+  console.log(`  токен: https://basescan.org/token/${token}`)
+  process.exit(0)
+}
+
 const [r0, r1] = await read(pair, PAIR, 'getReserves')
 const token0 = await read(pair, PAIR, 'token0')
 const tokenIsZero = getAddress(token0) === token
 const finalToken = Number(formatUnits(tokenIsZero ? r0 : r1, params.decimals))
 const finalUsdc = Number(formatUnits(tokenIsZero ? r1 : r0, 6))
 const left = await publicClient.getBalance({ address: account.address })
+const myTokens = await read(token, ERC20, 'balanceOf', [account.address])
 
 console.log(`\n${'-'.repeat(60)}`)
 console.log(`токен:    ${params.name} (${params.symbol})`)
@@ -311,8 +330,11 @@ console.log(`адрес:    ${token}`)
 console.log(`пул:      ${pair}`)
 console.log(`цена:     $${(finalUsdc / finalToken).toFixed(6)}`)
 console.log(`глубина:  $${(finalUsdc * 2).toFixed(2)}`)
+console.log(`у тебя:   ${formatUnits(myTokens, params.decimals)} ${params.symbol}`)
+console.log(`          номинально ~$${Math.round(Number(formatUnits(myTokens, params.decimals)) * (finalUsdc / finalToken))}`)
 console.log(`осталось: ${formatEther(left)} ETH`)
 console.log(`\nсмотреть: https://dexscreener.com/base/${pair}`)
+console.log(`          (появится после первой сделки — индексатору нужен своп)`)
 
 console.log(`\nдальше:`)
 console.log(`  верификация:  ETHERSCAN_API_KEY=... TOKEN_ADDRESS=${token} npm run verify`)

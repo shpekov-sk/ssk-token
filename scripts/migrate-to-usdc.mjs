@@ -245,7 +245,22 @@ await send('создание пары и ликвидность', {
 })
 
 // ---------- результат ----------
-const newPair = await read(factory, FACTORY, 'getPair', [token, usdc])
+// Узлы в фолбэке расходятся на блок: getPair сразу после создания пары может
+// вернуть ноль. Транзакции уже прошли, падать на выводе итога нельзя.
+const newPair = await waitUntil({
+  read: () => read(factory, FACTORY, 'getPair', [token, usdc]),
+  ok: (address) => address && address !== ZERO,
+  attempts: 20,
+  delayMs: 3000,
+  onRetry: () => process.stdout.write('.'),
+}).catch(() => null)
+
+if (!newPair) {
+  console.log(`\nВсе транзакции прошли, но адрес пары сеть пока не отдаёт — узел отстал.`)
+  console.log(`Пул создан, посмотри через минуту: https://basescan.org/token/${token}`)
+  process.exit(0)
+}
+
 const [nr0, nr1] = await read(newPair, PAIR, 'getReserves')
 const nToken0 = await read(newPair, PAIR, 'token0')
 const tokenIsZero = getAddress(nToken0) === token
