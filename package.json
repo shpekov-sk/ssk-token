@@ -16,7 +16,8 @@
     "pool": "node scripts/add-liquidity.mjs",
     "nudge": "node scripts/nudge-price.mjs",
     "zk": "node scripts/zk/demo.mjs",
-    "arb": "node scripts/arb/scan.mjs"
+    "arb": "node scripts/arb/scan.mjs",
+    "skim": "node scripts/arb/skim.mjs"
   },
   "keywords": [],
   "author": "",
