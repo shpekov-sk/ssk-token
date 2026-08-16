@@ -1,7 +1,7 @@
 {
-  "name": "flash-token",
+  "name": "ssk-token",
   "version": "0.1.0",
-  "description": "",
+  "description": "ERC-20 токен $$K.1 с фиксированной эмиссией",
   "main": "index.js",
   "scripts": {
     "test": "node scripts/compile.mjs && node --test 'test/*.test.mjs'",
