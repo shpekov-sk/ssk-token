@@ -18,7 +18,8 @@
     "zk": "node scripts/zk/demo.mjs",
     "arb": "node scripts/arb/scan.mjs",
     "skim": "node scripts/arb/skim.mjs",
-    "harvest": "node scripts/keeper/harvest-scan.mjs"
+    "harvest": "node scripts/keeper/harvest-scan.mjs",
+    "migrate": "node scripts/migrate-to-usdc.mjs"
   },
   "keywords": [],
   "author": "",
@@ -34,6 +35,8 @@
     "@noble/curves": "^1.9.1",
     "@noble/hashes": "^1.8.0",
     "@openzeppelin/contracts": "^5.6.1",
+    "@uniswap/v2-core": "^1.0.1",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0",
     "opentype.js": "^2.0.0",
     "pureimage": "^0.4.20",
     "solc": "^0.8.30",
