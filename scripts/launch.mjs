@@ -31,6 +31,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { createInterface } from 'node:readline/promises'
 import { artifact } from '../test/harness.mjs'
 import { normalizePrivateKey } from './key.mjs'
+import { parseAddress } from './address.mjs'
 import { transportFor } from './rpc.mjs'
 import { waitUntil } from './wait.mjs'
 import { quoteExactBuy, EXACT_SWAP_ABI } from './swap.mjs'
@@ -109,9 +110,11 @@ console.log(`кошелёк: ${account.address}\n`)
 let params
 let existingToken = null
 
-if (TOKEN_ADDRESS) {
-  if (!isAddress(TOKEN_ADDRESS)) fail(`TOKEN_ADDRESS не похож на адрес: ${TOKEN_ADDRESS}`)
-  existingToken = getAddress(TOKEN_ADDRESS)
+const given = process.argv.slice(2).find((arg) => !arg.startsWith('-')) ?? TOKEN_ADDRESS
+if (given) {
+  const parsed = parseAddress(given)
+  if (parsed.error) fail(parsed.error)
+  existingToken = parsed.address
 
   const code = await publicClient.getCode({ address: existingToken })
   if (!code || code === '0x') fail(`по адресу ${existingToken} нет кода — токен там не задеплоен`)

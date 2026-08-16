@@ -20,6 +20,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import { createInterface } from 'node:readline/promises'
 import { normalizePrivateKey } from './key.mjs'
+import { addressFrom } from './address.mjs'
 import { readEnv } from './env.mjs'
 import { transportFor, endpointsFor } from './rpc.mjs'
 import { waitUntil } from './wait.mjs'
@@ -56,7 +57,8 @@ const {
 
 const key = normalizePrivateKey(PRIVATE_KEY)
 if (key.error) fail(`ключ не подходит: ${key.error}`)
-if (!TOKEN_ADDRESS || !isAddress(TOKEN_ADDRESS)) fail('нужен TOKEN_ADDRESS=0x... — адрес токена')
+const parsedAddress = addressFrom({ argv: process.argv.slice(2), env: TOKEN_ADDRESS })
+if (parsedAddress.error) fail(parsedAddress.error)
 
 const chain = chains[CHAIN]
 if (!chain) fail(`неизвестная сеть "${CHAIN}"`)
@@ -65,7 +67,7 @@ const defaults = DEFAULTS[CHAIN]
 const routerAddress = ROUTER ?? defaults?.router
 if (!routerAddress) fail(`для сети ${CHAIN} не задан ROUTER=0x... роутера Uniswap V2`)
 
-const token = getAddress(TOKEN_ADDRESS)
+const token = parsedAddress.address
 const router = getAddress(routerAddress)
 const account = privateKeyToAccount(key.key)
 const transport = transportFor(chain, RPC_URL)

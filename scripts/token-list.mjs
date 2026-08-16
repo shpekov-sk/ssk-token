@@ -4,6 +4,7 @@
 //   TOKEN_ADDRESS=0x... CHAIN=base LOGO_URL=https://... node scripts/token-list.mjs
 import { getAddress, isAddress } from 'viem'
 import * as chains from 'viem/chains'
+import { addressFrom } from './address.mjs'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,8 +21,9 @@ const {
   LOGO_URL,
 } = process.env
 
-if (!TOKEN_ADDRESS || !isAddress(TOKEN_ADDRESS)) {
-  console.error('нужен TOKEN_ADDRESS=0x... — адрес контракта после деплоя')
+const parsedAddress = addressFrom({ argv: process.argv.slice(2), env: TOKEN_ADDRESS })
+if (parsedAddress.error) {
+  console.error(parsedAddress.error)
   process.exit(1)
 }
 
@@ -48,7 +50,7 @@ const list = {
   tokens: [
     {
       chainId: chain.id,
-      address: getAddress(TOKEN_ADDRESS), // checksummed — иначе список не примут
+      address: parsedAddress.address, // checksummed — иначе список не примут
       name: TOKEN_NAME,
       symbol: TOKEN_SYMBOL,
       decimals: Number(TOKEN_DECIMALS),

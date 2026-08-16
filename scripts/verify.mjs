@@ -13,6 +13,7 @@ import * as chains from 'viem/chains'
 import { createPublicClient, isAddress, getAddress, decodeAbiParameters } from 'viem'
 import { artifact } from '../test/harness.mjs'
 import { buildStandardInput, SOLC_VERSION } from './standard-input.mjs'
+import { addressFrom } from './address.mjs'
 import { findCreation } from './creation.mjs'
 import { buildVerifyRequest, buildStatusRequest } from './verify-request.mjs'
 import { transportFor } from './rpc.mjs'
@@ -25,12 +26,13 @@ const fail = (message) => {
 }
 
 if (!ETHERSCAN_API_KEY) fail('нужен ETHERSCAN_API_KEY — бесплатный ключ с etherscan.io/myapikey')
-if (!TOKEN_ADDRESS || !isAddress(TOKEN_ADDRESS)) fail('нужен TOKEN_ADDRESS=0x... — адрес контракта')
+const parsedAddress = addressFrom({ argv: process.argv.slice(2), env: TOKEN_ADDRESS })
+if (parsedAddress.error) fail(parsedAddress.error)
 
 const chain = chains[CHAIN]
 if (!chain) fail(`неизвестная сеть "${CHAIN}"`)
 
-const address = getAddress(TOKEN_ADDRESS)
+const address = parsedAddress.address
 
 console.log(`сеть:      ${chain.name} (${chain.id})`)
 console.log(`контракт:  ${address}`)
@@ -89,7 +91,7 @@ for (let attempt = 0; attempt < 30; attempt++) {
   if (check.status === '1') {
     const explorer = chain.blockExplorers?.default?.url
     console.log(`\nготово: ${check.result}`)
-    if (explorer) console.log(`${explorer}/address/${getAddress(TOKEN_ADDRESS)}#code`)
+    if (explorer) console.log(`${explorer}/address/${parsedAddress.address}#code`)
     process.exit(0)
   }
   fail(`\nне прошло: ${check.result}`)

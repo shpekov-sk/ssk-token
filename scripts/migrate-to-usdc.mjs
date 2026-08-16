@@ -26,6 +26,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import { createInterface } from 'node:readline/promises'
 import { normalizePrivateKey } from './key.mjs'
+import { addressFrom } from './address.mjs'
 import { readEnv } from './env.mjs'
 import { transportFor } from './rpc.mjs'
 import { waitUntil } from './wait.mjs'
@@ -56,11 +57,12 @@ const {
 
 const key = normalizePrivateKey(PRIVATE_KEY)
 if (key.error) fail(`ключ не подходит: ${key.error}`)
-if (!TOKEN_ADDRESS || !isAddress(TOKEN_ADDRESS)) fail('нужен TOKEN_ADDRESS=0x... — адрес токена')
+const parsedAddress = addressFrom({ argv: process.argv.slice(2), env: TOKEN_ADDRESS })
+if (parsedAddress.error) fail(parsedAddress.error)
 if (CHAIN !== 'base') fail('скрипт написан под Base: адреса роутера, фабрики и USDC зашиты для неё')
 
 const chain = chains[CHAIN]
-const token = getAddress(TOKEN_ADDRESS)
+const token = parsedAddress.address
 const router = getAddress(BASE.router)
 const factory = getAddress(BASE.factory)
 const weth = getAddress(BASE.weth)
