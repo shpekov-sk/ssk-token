@@ -3,6 +3,8 @@
 Простой токен на Solidity 0.8.30 + OpenZeppelin 5.6. Без владельца, без допэмиссии,
 без комиссий на перевод.
 
+**Выпущен в Base:** [`0x72883511A0B1dE1fF1cA0669D0C3dE699D56c0a8`](https://basescan.org/token/0x72883511A0B1dE1fF1cA0669D0C3dE699D56c0a8)
+
 ```bash
 npm install
 npm test

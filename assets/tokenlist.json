@@ -1,0 +1,24 @@
+{
+  "name": "$$K.1 List",
+  "timestamp": "2026-08-16T00:53:32.292Z",
+  "version": {
+    "major": 1,
+    "minor": 0,
+    "patch": 0
+  },
+  "logoURI": "https://raw.githubusercontent.com/shpekov-sk/ssk-token/main/assets/logo-256.png",
+  "keywords": [
+    "personal",
+    "fun"
+  ],
+  "tokens": [
+    {
+      "chainId": 8453,
+      "address": "0x72883511A0B1dE1fF1cA0669D0C3dE699D56c0a8",
+      "name": "$$K.1",
+      "symbol": "$$K.1",
+      "decimals": 18,
+      "logoURI": "https://raw.githubusercontent.com/shpekov-sk/ssk-token/main/assets/logo-256.png"
+    }
+  ]
+}
