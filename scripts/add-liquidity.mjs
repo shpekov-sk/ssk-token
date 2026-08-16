@@ -21,6 +21,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { createInterface } from 'node:readline/promises'
 import { normalizePrivateKey } from './key.mjs'
 import { transportFor, endpointsFor } from './rpc.mjs'
+import { waitUntil } from './wait.mjs'
 import { describePlan, ethForTargetPrice, toWei } from './pool-plan.mjs'
 
 // Официальные деплои Uniswap V2 в Base. Проверяются в сети ниже.
@@ -168,14 +169,15 @@ rl.close()
 if (answer.trim() !== symbol) fail('не совпало — отмена')
 
 // ---------- approve ----------
-const allowance = await publicClient.readContract({
-  address: token,
-  abi: ERC20_ABI,
-  functionName: 'allowance',
-  args: [account.address, router],
-})
+const readAllowance = () =>
+  publicClient.readContract({
+    address: token,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: [account.address, router],
+  })
 
-if (allowance < amountTokenDesired) {
+if ((await readAllowance()) < amountTokenDesired) {
   console.log('\nразрешаю роутеру списать токены...')
   const approveHash = await walletClient.writeContract({
     address: token,
@@ -186,6 +188,18 @@ if (allowance < amountTokenDesired) {
   const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash })
   if (approveReceipt.status !== 'success') fail(`approve не прошёл: ${approveHash}`)
   console.log(`approve: ${approveHash}`)
+
+  // Узлы в фолбэке расходятся на блок-два: следующий запрос может уйти на тот,
+  // который approve ещё не видит, и роутер упадёт с TRANSFER_FROM_FAILED.
+  process.stdout.write('жду, пока allowance увидят все узлы')
+  await waitUntil({
+    read: readAllowance,
+    ok: (allowance) => allowance >= amountTokenDesired,
+    attempts: 20,
+    delayMs: 3000,
+    onRetry: () => process.stdout.write('.'),
+  }).catch((error) => fail(`\n${error.message}\n\napprove прошёл (${approveHash}), но сеть его ещё не отдаёт. Запусти скрипт снова.`))
+  console.log(' готово')
 } else {
   console.log('\napprove уже есть, пропускаю')
 }
@@ -201,13 +215,33 @@ const block = await publicClient.getBlock()
 const txDeadline = block.timestamp + 1200n
 
 console.log('добавляю ликвидность...')
-const hash = await walletClient.writeContract({
+
+const liquidityCall = {
   address: router,
   abi: ROUTER_ABI,
   functionName: 'addLiquidityETH',
   args: [token, amountTokenDesired, minToken, minEth, account.address, txDeadline],
   value: amountEth,
+  account,
+}
+
+// Симулируем отдельно, чтобы отказ роутера пришёл понятной строкой, а не стеком
+// viem. Плюс терпим отстающий узел: он мог ещё не увидеть approve.
+// waitUntil повторяет, пока read бросает, — успешная симуляция и есть результат.
+await waitUntil({
+  read: () => publicClient.simulateContract(liquidityCall),
+  ok: () => true,
+  attempts: 8,
+  delayMs: 3000,
+  onRetry: () => process.stdout.write('.'),
+}).catch((error) => {
+  const reason = /TRANSFER_FROM_FAILED/.test(error.message)
+    ? 'роутер не смог списать токены: allowance ещё не виден сети. Запусти скрипт снова через минуту.'
+    : error.message
+  fail(`\nсимуляция не прошла — транзакция не отправлена, газ не потрачен.\n${reason}`)
 })
+
+const hash = await walletClient.writeContract(liquidityCall)
 console.log(`tx: ${hash}`)
 
 const receipt = await publicClient.waitForTransactionReceipt({ hash })
