@@ -20,7 +20,8 @@
     "skim": "node scripts/arb/skim.mjs",
     "harvest": "node scripts/keeper/harvest-scan.mjs",
     "migrate": "node scripts/migrate-to-usdc.mjs",
-    "launch": "node scripts/launch.mjs"
+    "launch": "node scripts/launch.mjs",
+    "seed": "node scripts/seed-trade.mjs"
   },
   "keywords": [],
   "author": "",

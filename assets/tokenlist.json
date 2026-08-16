@@ -1,6 +1,6 @@
 {
-  "name": "$$K.1 List",
-  "timestamp": "2026-08-16T00:53:32.292Z",
+  "name": "ZLP List",
+  "timestamp": "2026-08-16T07:04:47.334Z",
   "version": {
     "major": 1,
     "minor": 0,
@@ -14,9 +14,9 @@
   "tokens": [
     {
       "chainId": 8453,
-      "address": "0x72883511A0B1dE1fF1cA0669D0C3dE699D56c0a8",
-      "name": "$$K.1",
-      "symbol": "$$K.1",
+      "address": "0x3fbA88B5633FF26A3969e6847b5dAFa4108a6FFB",
+      "name": "ZALUPA",
+      "symbol": "ZLP",
       "decimals": 18,
       "logoURI": "https://raw.githubusercontent.com/shpekov-sk/ssk-token/main/assets/logo-256.png"
     }
